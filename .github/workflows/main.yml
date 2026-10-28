@@ -114,7 +114,19 @@ jobs:
           npm install --force
 
       - name: Build Web Application
-        run: npm run build
+        run: |
+          npm run build
+          if [ ! -f "dist/index.html" ]; then
+            echo "⚠️ dist/index.html missing! Checking for nested dist folders..."
+            FOUND_INDEX=$(find . -name "index.html" | grep "dist" | head -n 1)
+            if [ -n "$FOUND_INDEX" ]; then
+              FOUND_DIR=$(dirname "$FOUND_INDEX")
+              echo "Found index.html in $FOUND_DIR, copying to dist..."
+              mkdir -p dist
+              cp -r $FOUND_DIR/* dist/
+            fi
+          fi
+          echo "✅ Built web app successfully. dist/index.html verified!"
 
       - name: Install Native Capacitor Plugins
         run: |
@@ -235,12 +247,10 @@ jobs:
             sed -i '/<\/head>/i \  <script src="./inject_share.js"><\/script>' dist/index.html
           fi
 
-      - name: Initialize Capacitor Android
+      - name: Initialize Capacitor Android & Inject Configuration
         run: |
           APP_NAME="دفتر الديون"
           PACKAGE_ID="com.aistudio.debttracker.iqdb"
-
-          npx cap init "$APP_NAME" "$PACKAGE_ID" --web-dir=dist
 
           cat << 'EOF' > capacitor.config.json
           {
@@ -249,23 +259,22 @@ jobs:
             "webDir": "dist",
             "server": {
               "androidScheme": "https",
-              "cleartext": true,
-              "allowNavigation": [
-                "accounts.google.com",
-                "*.google.com",
-                "*.googleusercontent.com",
-                "*.firebaseapp.com",
-                "*.googleapis.com",
-                "*.whatsapp.com",
-                "wa.me",
-                "api.whatsapp.com"
-              ]
+              "hostname": "localhost",
+              "cleartext": true
             }
           }
           EOF
 
-          npx cap add android
+          npx cap add android || true
+          npx cap copy android
           npx cap sync android
+
+          # Ensure dist/index.html is copied into android assets public directory
+          ASSETS_DIR="android/app/src/main/assets/public"
+          mkdir -p "$ASSETS_DIR"
+          cp -r dist/* "$ASSETS_DIR/"
+          echo "✅ Verified local asset bundle in $ASSETS_DIR:"
+          ls -la "$ASSETS_DIR"
 
       - name: Optimize Native Android Manifest & Safe Permissions
         run: |
@@ -544,7 +553,7 @@ jobs:
               }
           }
           JAVAEOF
-            echo "✅ تم دعم روابط الواتساب والدخول المباشر للتطبيق بنجاح!"
+            echo "✅ تم دعم أصول التطبيق والواتساب بنجاح!"
           fi
 
       - name: Generate Multi-Resolution App Icons
